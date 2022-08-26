@@ -1,0 +1,2 @@
+[console_scripts]
+talker = sensor_hub.camera_pub:main

@@ -1,0 +1,13 @@
+package.xml
+setup.cfg
+setup.py
+resource/sensor_hub
+sensor_hub/__init__.py
+sensor_hub/camera_pub.py
+sensor_hub.egg-info/PKG-INFO
+sensor_hub.egg-info/SOURCES.txt
+sensor_hub.egg-info/dependency_links.txt
+sensor_hub.egg-info/entry_points.txt
+sensor_hub.egg-info/requires.txt
+sensor_hub.egg-info/top_level.txt
+sensor_hub.egg-info/zip-safe
