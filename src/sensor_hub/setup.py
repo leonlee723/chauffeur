@@ -20,7 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'talker = sensor_hub.camera_pub:main',
+            'talker = sensor_hub.kitti_pub:main',
         ],
     },
 )
