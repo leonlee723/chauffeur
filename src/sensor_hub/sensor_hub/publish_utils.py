@@ -1,3 +1,4 @@
+import os
 from distutils.archive_util import make_archive
 # from std_msgs.msg import Header
 # from cv_bridge import CvBridge
@@ -8,6 +9,8 @@ from geometry_msgs.msg import Point
 import numpy as np
 import rclpy as rclpy
 from rclpy.duration import Duration
+from transforms3d._gohlketransforms import quaternion_from_euler
+from ament_index_python.packages import get_package_share_directory
 
 FRAME_ID = 'map'
 
@@ -79,4 +82,33 @@ def publish_ego_car(ego_car_pub):
 
     ego_car_pub.publish(marker)
 
+def publish_car_model(model_pub):
+    mesh_marker = Marker()
+    mesh_marker.header.frame_id = FRAME_ID
+    
+    mesh_marker.id = -1
+    mesh_marker.lifetime = Duration().to_msg()
+    mesh_marker.type = Marker.MESH_RESOURCE
+    # mesh_marker.mesh_resource = "package://sensor_hub/meshes/4096-MicroWheelsG.dae"
+    mesh_marker.mesh_resource = "file://"+os.path.join(get_package_share_directory('sensor_hub'), 'meshes','4096-MicroWheelsG.dae')
 
+    mesh_marker.pose.position.x = -2.0
+    mesh_marker.pose.position.y = 0.0
+    mesh_marker.pose.position.z = -1.7
+
+    q = quaternion_from_euler(-np.pi/2, np.pi, -np.pi/2) # roll, pitch and yaw
+    mesh_marker.pose.orientation.x = q[0]
+    mesh_marker.pose.orientation.y = q[1]
+    mesh_marker.pose.orientation.z = q[2]
+    mesh_marker.pose.orientation.w = q[3]
+
+    mesh_marker.color.r = 1.0
+    mesh_marker.color.g = 1.0
+    mesh_marker.color.b = 1.0
+    mesh_marker.color.a = 1.0
+
+    mesh_marker.scale.x = 30.0
+    mesh_marker.scale.y = 30.0
+    mesh_marker.scale.z = 30.0
+
+    model_pub.publish(mesh_marker)

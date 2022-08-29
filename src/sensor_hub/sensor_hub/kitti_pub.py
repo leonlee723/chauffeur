@@ -14,6 +14,7 @@ import numpy as np
 
 from sensor_hub.data_utils import *
 from sensor_hub.publish_utils import *
+from ament_index_python.packages import get_package_share_directory
 
 
 DATA_PATH = '/volume/data/kitti/RawData/2011_09_26/2011_09_26_drive_0005_sync'
@@ -26,6 +27,7 @@ class MinimalPublisher(Node):
         self.cam_publisher = self.create_publisher(Image, 'camera_topic', 10)
         self.point_publisher = self.create_publisher(PointCloud2, 'point_topic', 10)
         self.ego_publisher = self.create_publisher(Marker, 'ego_car_topic', 10)
+        self.model_publisher = self.create_publisher(Marker, 'car_model_topic', 10)
         timer_period = 0.1 # kitti 10frame/s
         self.bridge = CvBridge()
         self.timer = self.create_timer(timer_period, self.timer_callback)
@@ -41,8 +43,10 @@ class MinimalPublisher(Node):
         # self.point_publisher.publish(self.point_cloud(points[:,:3], 'map'))
         publish_point_cloud(self.point_publisher, points)
         publish_ego_car(self.ego_publisher)
+        publish_car_model(self.model_publisher)
         # self.get_logger().info('Publishing: "%s"' % msg.data)
         self.get_logger().info('Publishing: image')
+        # self.get_logger().info(os.path.join(get_package_share_directory('sensor_hub'), 'meshes'))
         self.frame += 1
         #一共154张照片，0-153，如果小于154，取余数与frame相同，如果frame大于154，则从0开始
         self.frame %= 154  
