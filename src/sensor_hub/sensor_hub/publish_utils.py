@@ -4,7 +4,8 @@ from distutils.archive_util import make_archive
 # from cv_bridge import CvBridge
 import std_msgs.msg as std_msgs
 import sensor_msgs.msg as sensor_msgs
-from visualization_msgs.msg import Marker
+from sensor_msgs.msg import Imu, NavSatFix
+from visualization_msgs.msg import Marker, MarkerArray
 from geometry_msgs.msg import Point
 import numpy as np
 import rclpy as rclpy
@@ -48,6 +49,8 @@ def publish_ego_car(ego_car_pub):
     """
     Publish left and right 45 degree FOV lines and ego car model mesh
     """
+    marker_array = MarkerArray()
+
     marker = Marker()
     marker.header.frame_id = FRAME_ID
     # marker.header.stamp
@@ -80,9 +83,8 @@ def publish_ego_car(ego_car_pub):
     point3.z = 0.0
     marker.points.append(point3)
 
-    ego_car_pub.publish(marker)
+    marker_array.markers.append(marker)
 
-def publish_car_model(model_pub):
     mesh_marker = Marker()
     mesh_marker.header.frame_id = FRAME_ID
     
@@ -110,5 +112,36 @@ def publish_car_model(model_pub):
     mesh_marker.scale.x = 30.0
     mesh_marker.scale.y = 30.0
     mesh_marker.scale.z = 30.0
+    marker_array.markers.append(mesh_marker)
 
-    model_pub.publish(mesh_marker)
+    ego_car_pub.publish(marker_array)
+
+def publish_imu(imu_pub, imu_data):
+    imu = Imu()
+    imu.header.frame_id = FRAME_ID
+    
+    q = quaternion_from_euler(float(imu_data.roll), float(imu_data.pitch), float(imu_data.yaw)) # roll, pitch and yaw
+    imu.orientation.x = q[0]
+    imu.orientation.y = q[1]
+    imu.orientation.z = q[2]
+    imu.orientation.w = q[3]
+
+    imu.linear_acceleration.x = float(imu_data.af)
+    imu.linear_acceleration.y = float(imu_data.al)
+    imu.linear_acceleration.z = float(imu_data.au)
+
+    imu.angular_velocity.x = float(imu_data.wf)
+    imu.angular_velocity.y = float(imu_data.wl)
+    imu.angular_velocity.z = float(imu_data.wu)
+
+    imu_pub.publish(imu)
+
+def publish_gps(gps_pub, gps_data):
+    gps = NavSatFix()
+    gps.header.frame_id = FRAME_ID
+
+    gps.latitude = float(gps_data.lat)
+    gps.longitude = float(gps_data.lon)
+    gps.altitude = float(gps_data.alt)
+
+    gps_pub.publish(gps)
