@@ -12,10 +12,16 @@ import rclpy as rclpy
 from rclpy.duration import Duration
 from transforms3d._gohlketransforms import quaternion_from_euler
 from ament_index_python.packages import get_package_share_directory
+import cv2
 
 FRAME_ID = 'map'
+DETECTION_COLOR_DICT = {'Car':(255,255,0), 'Pedestrian':(0,226,255), 'Cyclist':(141,40,255)}
 
-def publish_camera(cam_pub, bridge, image):
+def publish_camera(cam_pub, bridge, image, boxes, types):
+    for typ, box in zip(types,boxes):
+        top_left = int(box[0]), int(box[1])
+        bottom_right = int(box[2]), int(box[3])
+        cv2.rectangle(image,top_left,bottom_right,DETECTION_COLOR_DICT[typ],2)
     cam_pub.publish(bridge.cv2_to_imgmsg(image, "bgr8"))
 
 def publish_point_cloud(pcl_pub, points):

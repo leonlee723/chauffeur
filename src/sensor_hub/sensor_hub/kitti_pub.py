@@ -33,15 +33,18 @@ class MinimalPublisher(Node):
         self.bridge = CvBridge()
         self.timer = self.create_timer(timer_period, self.timer_callback)
         self.frame = 0
-    
+        self.df_tracking = read_tracking('/volume/data/kitti/training/label_02/0000.txt')
+
     def timer_callback(self):
         # img = cv2.imread(os.path.join(DATA_PATH, 'image_02/data/%010d.png'%self.frame))
         img = read_camera(os.path.join(DATA_PATH, 'image_02/data/%010d.png'%self.frame))
+        boxes = np.array(self.df_tracking[self.df_tracking.frame==self.frame][['bbox_left','bbox_top','bbox_right','bbox_bottom']])
+        types = np.array(self.df_tracking[self.df_tracking.frame==self.frame]['type'])
         # points = np.fromfile(os.path.join(DATA_PATH, 'velodyne_points/data/%010d.bin'%self.frame), dtype=np.float32).reshape(-1,4)
         points = read_point_cloud(os.path.join(DATA_PATH, 'velodyne_points/data/%010d.bin'%self.frame))
         imu_gps_data = read_imu(os.path.join(DATA_PATH, 'oxts/data/%010d.txt'%self.frame))
         # self.cam_publisher.publish(self.bridge.cv2_to_imgmsg(img, 'bgr8'))
-        publish_camera(self.cam_publisher, self.bridge, img)
+        publish_camera(self.cam_publisher, self.bridge, img, boxes, types)
         # self.point_publisher.publish(self.point_cloud(points[:,:3], 'map'))
         publish_point_cloud(self.point_publisher, points)
         publish_ego_car(self.ego_publisher)
