@@ -10,6 +10,7 @@ from sensor_msgs.msg import Image, PointCloud2
 from cv_bridge import CvBridge 
 import cv2
 import os
+from collections import deque
 import numpy as np
 
 from sensor_hub.data_utils import *
@@ -21,7 +22,7 @@ DATA_PATH = '/volume/data/kitti/RawData/2011_09_26/2011_09_26_drive_0005_sync'
 
 class Object():
     def __init__(self):
-        self.locations = []
+        self.locations = deque(maxlen=20)
     
     def update(self, displacement, yaw_change):
         for i in range(len(self.locations)):
@@ -29,10 +30,10 @@ class Object():
             x1 = x0 * np.cos(yaw_change) + y0 * np.sin(yaw_change) - displacement
             y1 = -x0 * np.sin(yaw_change) + y0 * np.cos(yaw_change)
             self.locations[i] = np.array([x1, y1])
-        self.locations += [np.array([0,0])]
+        self.locations.appendleft(np.array([0,0]))
 
     def reset(self):
-        self.locations = []
+        self.locations = deque(maxlen=20)
 
 class MinimalPublisher(Node):
 
@@ -53,7 +54,7 @@ class MinimalPublisher(Node):
         self.df_tracking = read_tracking('/volume/data/kitti/training/label_02/0000.txt')
         self.calib =Calibration('/volume/data/kitti/RawData/2011_09_26/', from_video=True)
         
-        self.ego_car = Object()
+        self.ego_car_loc = Object()
         self.prev_imu_data = None 
 
     def compute_3d_box_cam2(self,h,w,l,x,y,z,yaw):
@@ -87,8 +88,10 @@ class MinimalPublisher(Node):
         if self.prev_imu_data is not None:
             displacement = 0.1*np.linalg.norm(imu_gps_data[['vf','vl']])
             yaw_change = float(imu_gps_data.yaw - self.prev_imu_data.yaw)    
-            self.ego_car.update(displacement, yaw_change)
+            self.ego_car_loc.update(displacement, yaw_change)
+
         self.prev_imu_data = imu_gps_data
+        
         # self.cam_publisher.publish(self.bridge.cv2_to_imgmsg(img, 'bgr8'))
         publish_camera(self.cam_publisher, self.bridge, img, boxes2d, types)
         # self.point_publisher.publish(self.point_cloud(points[:,:3], 'map'))
@@ -97,13 +100,16 @@ class MinimalPublisher(Node):
         publish_imu(self.imu_publisher,imu_gps_data)
         publish_gps(self.gps_publisher,imu_gps_data)
         publish_3dbox(self.box3d_publisher, corners_3d_velos,types,track_ids)
-        publish_loc(self.loc_publisher, self.ego_car.locations)
+        publish_loc(self.loc_publisher, self.ego_car_loc.locations)
         # self.get_logger().info('Publishing: "%s"' % msg.data)
         self.get_logger().info('Publishing: image')
         # self.get_logger().info(os.path.join(get_package_share_directory('sensor_hub'), 'meshes'))
         self.frame += 1
         #一共154张照片，0-153，如果小于154，取余数与frame相同，如果frame大于154，则从0开始
-        self.frame %= 154  
+        #self.frame %= 154  
+        if self.frame == 154:
+            self.frame = 0
+            self.ego_car_loc.reset()
 
 
 def main(args=None):

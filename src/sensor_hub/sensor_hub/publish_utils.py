@@ -238,14 +238,15 @@ def publish_loc(loc_pub, locations):
     marker.color.r = 1.0
     marker.color.g = 0.0
     marker.color.b = 1.0
-    marker.color.a = 0.2
-
+    marker.color.a = 1.0
+    marker.scale.x = 0.2
     marker.points = []
     for p in locations:
+        # print(p)
         point = Point()
         point.x = float(p[0])
         point.y = float(p[1])
-        # point.z = float(p[2])
+        point.z = float(0.0)
         marker.points.append(point)
 
     marker_array.markers.append(marker)
