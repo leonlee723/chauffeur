@@ -25,4 +25,5 @@ def read_tracking(path):
     df.columns = TRACKING_COLUMN_NAMES
     df.loc[df.type.isin(['Truck','Van','Tram']),'type'] = 'Car'
     df = df[df.type.isin(['Car', 'Pedestrian','Cyclist'])]
+    # print("tracking lens:"+str(len(df)))
     return df

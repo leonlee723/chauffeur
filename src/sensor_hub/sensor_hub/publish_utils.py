@@ -1,5 +1,7 @@
+from cgi import test
 import os
 from distutils.archive_util import make_archive
+from re import T
 # from std_msgs.msg import Header
 # from cv_bridge import CvBridge
 import std_msgs.msg as std_msgs
@@ -16,6 +18,11 @@ import cv2
 
 FRAME_ID = 'map'
 DETECTION_COLOR_DICT = {'Car':(255,255,0), 'Pedestrian':(0,226,255), 'Cyclist':(141,40,255)}
+
+LINES  = [[0, 1], [1, 2], [2, 3], [3, 0]]  # Lower plane parallel to Z=0 plane
+LINES += [[4, 5], [5, 6], [6, 7], [7, 4]]  # Upper plane parallel to Z=0 plane
+LINES += [[0, 4], [1, 5], [2, 6], [3, 7]]  # Connections between upper and lower planes
+LINES += [[4, 1], [5, 0]] # front face X
 
 def publish_camera(cam_pub, bridge, image, boxes, types):
     for typ, box in zip(types,boxes):
@@ -151,3 +158,96 @@ def publish_gps(gps_pub, gps_data):
     gps.altitude = float(gps_data.alt)
 
     gps_pub.publish(gps)
+
+def publish_3dbox(box3d_pub, corners_3d_velos, types, track_ids):
+    marker_array = MarkerArray()
+    for i, corners_3d_velo in enumerate(corners_3d_velos):
+        marker = Marker()
+        marker.header.frame_id = FRAME_ID
+        
+        marker.id = i
+        marker.action = Marker.ADD
+        marker.lifetime = Duration(seconds=0.1).to_msg()
+        marker.type = Marker.LINE_LIST
+
+        b ,g ,r = DETECTION_COLOR_DICT[types[i]]
+        marker.color.r = r/255.0
+        marker.color.g = g/255.0
+        marker.color.b = b/255.0
+
+        marker.color.a = 1.0
+        marker.scale.x = 0.1
+
+        marker_points = []
+        for l in LINES:
+            p1 = corners_3d_velo[l[0]]
+            point1 = Point()
+            point1.x = p1[0]
+            point1.y = p1[1]
+            point1.z = p1[2]
+            marker.points.append(point1)
+            p2 = corners_3d_velo[l[1]]
+            point2 = Point()
+            point2.x = p2[0]
+            point2.y = p2[1]
+            point2.z = p2[2]
+            marker.points.append(point2)
+
+        marker_array.markers.append(marker)
+
+        text_marker = Marker()
+        text_marker.header.frame_id = FRAME_ID
+        
+        text_marker.id = i + 1000
+        text_marker.action = Marker.ADD
+        text_marker.lifetime = Duration(seconds=0.1).to_msg()
+        text_marker.type = Marker.TEXT_VIEW_FACING
+
+        p4 = np.mean(corners_3d_velo, axis=0)
+
+        text_marker.pose.position.x = p4[0]
+        text_marker.pose.position.y = p4[1]
+        text_marker.pose.position.z = p4[2] + 1
+
+        text_marker.text = str(track_ids[i])
+
+        text_marker.scale.x = 1.0
+        text_marker.scale.y = 1.0
+        text_marker.scale.z = 1.0
+
+        b ,g ,r = DETECTION_COLOR_DICT[types[i]]
+        text_marker.color.r = r/255.0
+        text_marker.color.g = g/255.0
+        text_marker.color.b = b/255.0
+        text_marker.color.a = 1.0        
+
+        marker_array.markers.append(text_marker)
+    
+    box3d_pub.publish(marker_array)
+
+def publish_loc(loc_pub, locations):
+    marker_array = MarkerArray()
+
+    marker = Marker()
+    marker.header.frame_id = FRAME_ID
+
+    marker.action = Marker.ADD
+    marker.lifetime = Duration().to_msg()
+    marker.type = Marker.LINE_STRIP
+
+    marker.color.r = 1.0
+    marker.color.g = 0.0
+    marker.color.b = 1.0
+    marker.color.a = 0.2
+
+    marker.points = []
+    for p in locations:
+        point = Point()
+        point.x = float(p[0])
+        point.y = float(p[1])
+        # point.z = float(p[2])
+        marker.points.append(point)
+
+    marker_array.markers.append(marker)
+    loc_pub.publish(marker_array)
+
