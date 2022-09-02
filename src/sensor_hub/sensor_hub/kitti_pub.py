@@ -1,4 +1,5 @@
 ''' kitti image to RViz '''
+import imp
 from unicodedata import name
 import rclpy
 
@@ -16,24 +17,31 @@ import numpy as np
 from sensor_hub.data_utils import *
 from sensor_hub.publish_utils import *
 from sensor_hub.kitti_util import *
+from sensor_hub.misc import *
 
 
 DATA_PATH = '/volume/data/kitti/RawData/2011_09_26/2011_09_26_drive_0005_sync'
+EGOCAR = ego_car = np.array([[2.15, 0.9, -1.73], [2.15, -0.9,-1.73], [-1.95, -0.9, -1.73], [-1.95, 0.9, -1.73],
+                    [2.15, 0.9, -0.23], [2.15, -0.9,-0.23], [-1.95, -0.9, -0.23], [-1.95, 0.9, -0.23]])
 
 class Object():
-    def __init__(self):
+    def __init__(self, center):
         self.locations = deque(maxlen=20)
+        self.locations.appendleft(center)
     
-    def update(self, displacement, yaw_change):
+    def update(self, center, displacement, yaw_change):
         for i in range(len(self.locations)):
             x0, y0 = self.locations[i]
             x1 = x0 * np.cos(yaw_change) + y0 * np.sin(yaw_change) - displacement
             y1 = -x0 * np.sin(yaw_change) + y0 * np.cos(yaw_change)
             self.locations[i] = np.array([x1, y1])
-        self.locations.appendleft(np.array([0,0]))
+        
+        if center is not None:
+            self.locations.appendleft(center)
 
     def reset(self):
         self.locations = deque(maxlen=20)
+
 
 class MinimalPublisher(Node):
 
@@ -47,6 +55,7 @@ class MinimalPublisher(Node):
         self.gps_publisher = self.create_publisher(NavSatFix, 'gps_topic', 10)
         self.box3d_publisher = self.create_publisher(MarkerArray,'box3d_topic', 10)
         self.loc_publisher = self.create_publisher(MarkerArray,'loc_topic', 10)
+        self.dist_publisher = self.create_publisher(MarkerArray,'dist_topic',10)
         timer_period = 0.1 # kitti 10frame/s
         self.bridge = CvBridge()
         self.timer = self.create_timer(timer_period, self.timer_callback)
@@ -54,8 +63,9 @@ class MinimalPublisher(Node):
         self.df_tracking = read_tracking('/volume/data/kitti/training/label_02/0000.txt')
         self.calib =Calibration('/volume/data/kitti/RawData/2011_09_26/', from_video=True)
         
-        self.ego_car_loc = Object()
+        self.ego_car_loc = Object([0,0])
         self.prev_imu_data = None 
+        self.tracker = {} # id : Object
 
     def compute_3d_box_cam2(self,h,w,l,x,y,z,yaw):
         R = np.array([[np.cos(yaw), 0, np.sin(yaw)],[0,1,0],[-np.sin(yaw), 0, np.cos(yaw)]])
@@ -75,21 +85,42 @@ class MinimalPublisher(Node):
         boxes3d = np.array(self.df_tracking[self.df_tracking.frame==self.frame][['height','width','length','pos_x','pos_y','pos_z','rot_y']])
         # print(boxes3d)
         corners_3d_velos = []
+        centers = {} # track_id:center
+        minPQDs = []
         # print("boxes lens:"+str(len(boxes3d)))
-        for box3d in boxes3d:
+        for track_id,box3d in zip(track_ids,boxes3d):
             corners_3d_cam2 = self.compute_3d_box_cam2(*box3d)
             corners_3d_velo = self.calib.project_rect_to_velo(corners_3d_cam2.T)
+            minPQDs += [min_distance_cuboids(EGOCAR, corners_3d_velo)]
             corners_3d_velos += [corners_3d_velo]
+            centers[track_id] = np.mean(corners_3d_velo, axis=0)[:2] #just x,y axis
+        corners_3d_velos += [EGOCAR]
+        types = np.append(types, 'Car')
+        track_ids = np.append(track_ids, -1)
+        centers[-1] = np.array([0,0])
+
         # print("corners_3d_velos lens:"+str(len(corners_3d_velos)))
         # points = np.fromfile(os.path.join(DATA_PATH, 'velodyne_points/data/%010d.bin'%self.frame), dtype=np.float32).reshape(-1,4)
         points = read_point_cloud(os.path.join(DATA_PATH, 'velodyne_points/data/%010d.bin'%self.frame))
         imu_gps_data = read_imu(os.path.join(DATA_PATH, 'oxts/data/%010d.txt'%self.frame))
 
-        if self.prev_imu_data is not None:
+        if self.prev_imu_data is None:
+            for track_id in centers:
+                self.tracker[track_id] = Object(center=centers[track_id])
+        else:
             displacement = 0.1*np.linalg.norm(imu_gps_data[['vf','vl']])
-            yaw_change = float(imu_gps_data.yaw - self.prev_imu_data.yaw)    
-            self.ego_car_loc.update(displacement, yaw_change)
-
+            yaw_change = float(imu_gps_data.yaw - self.prev_imu_data.yaw)
+            for track_id in centers:
+                if track_id in self.tracker:
+                    self.tracker[track_id].update(centers[track_id], displacement, yaw_change)
+                else:
+                    self.tracker[track_id] = Object(centers[track_id])
+            for track_id in self.tracker:
+                if track_id not in centers:
+                    self.tracker[track_id].update(None, displacement, yaw_change)
+            self.ego_car_loc.update(center=[0,0],displacement=displacement, yaw_change=yaw_change)
+        # self.tracker[1000] = self.ego_car_loc #append ego to tracker, set track_id of ego is 1000
+        # centers[1000] = [0,0]
         self.prev_imu_data = imu_gps_data
         
         # self.cam_publisher.publish(self.bridge.cv2_to_imgmsg(img, 'bgr8'))
@@ -100,7 +131,8 @@ class MinimalPublisher(Node):
         publish_imu(self.imu_publisher,imu_gps_data)
         publish_gps(self.gps_publisher,imu_gps_data)
         publish_3dbox(self.box3d_publisher, corners_3d_velos,types,track_ids)
-        publish_loc(self.loc_publisher, self.ego_car_loc.locations)
+        publish_loc(self.loc_publisher, self.tracker, centers)
+        publish_dist(self.dist_publisher, minPQDs)
         # self.get_logger().info('Publishing: "%s"' % msg.data)
         self.get_logger().info('Publishing: image')
         # self.get_logger().info(os.path.join(get_package_share_directory('sensor_hub'), 'meshes'))
@@ -109,7 +141,8 @@ class MinimalPublisher(Node):
         #self.frame %= 154  
         if self.frame == 154:
             self.frame = 0
-            self.ego_car_loc.reset()
+            for track_id in self.tracker:
+                self.tracker[track_id].reset()
 
 
 def main(args=None):

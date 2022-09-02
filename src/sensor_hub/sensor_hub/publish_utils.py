@@ -1,4 +1,5 @@
 from cgi import test
+from math import dist
 import os
 from distutils.archive_util import make_archive
 from re import T
@@ -225,30 +226,91 @@ def publish_3dbox(box3d_pub, corners_3d_velos, types, track_ids):
     
     box3d_pub.publish(marker_array)
 
-def publish_loc(loc_pub, locations):
+def publish_loc(loc_pub, tracker, centers):
     marker_array = MarkerArray()
 
-    marker = Marker()
-    marker.header.frame_id = FRAME_ID
+    for track_id in centers:
 
-    marker.action = Marker.ADD
-    marker.lifetime = Duration().to_msg()
-    marker.type = Marker.LINE_STRIP
+        marker = Marker()
+        marker.header.frame_id = FRAME_ID
+        
+        marker.action = Marker.ADD
+        marker.lifetime = Duration(seconds=0.1).to_msg()
+        marker.type = Marker.LINE_STRIP
+        marker.id = int(track_id)
 
-    marker.color.r = 1.0
-    marker.color.g = 0.0
-    marker.color.b = 1.0
-    marker.color.a = 1.0
-    marker.scale.x = 0.2
-    marker.points = []
-    for p in locations:
-        # print(p)
-        point = Point()
-        point.x = float(p[0])
-        point.y = float(p[1])
-        point.z = float(0.0)
-        marker.points.append(point)
+        marker.color.r = 1.0
+        marker.color.g = 0.0
+        marker.color.b = 1.0
+        marker.color.a = 1.0
+        marker.scale.x = 0.2
+        marker.points = []
+        for p in tracker[track_id].locations:
+            # print(p)
+            point = Point()
+            point.x = float(p[0])
+            point.y = float(p[1])
+            point.z = float(0.0)
+            marker.points.append(point)
 
-    marker_array.markers.append(marker)
+        marker_array.markers.append(marker)
     loc_pub.publish(marker_array)
 
+def publish_dist(dist_pub, minPQDs):
+    marker_array = MarkerArray()
+
+    for i, (minP, minQ, minD) in enumerate(minPQDs):
+        marker = Marker()
+        marker.header.frame_id = FRAME_ID
+
+        marker.action = Marker.ADD
+        marker.lifetime = Duration(seconds=0.1).to_msg()
+        marker.type = Marker.LINE_STRIP
+        marker.id = i
+
+        marker.color.r = 1.0
+        marker.color.g = 0.0
+        marker.color.b = 1.0
+        marker.color.a = 0.5
+        marker.scale.x = 0.1
+
+        marker.points = []
+        point = Point()
+        point.x = float(minP[0])
+        point.y = float(minP[1])
+        point.z = float(0.0)
+        marker.points.append(point)
+        point2 = Point()
+        point2.x = float(minQ[0])
+        point2.y = float(minQ[1])
+        point2.z = float(0.0)
+        marker.points.append(point2)
+
+        marker_array.markers.append(marker)
+
+        text_marker = Marker()
+        text_marker.header.frame_id = FRAME_ID
+        
+        text_marker.id = i + 1000
+        text_marker.action = Marker.ADD
+        text_marker.lifetime = Duration(seconds=0.1).to_msg()
+        text_marker.type = Marker.TEXT_VIEW_FACING
+
+        p = (minP + minQ) / 2.0
+        text_marker.pose.position.x = p[0]
+        text_marker.pose.position.y = p[1]
+        text_marker.pose.position.z = 0.0
+
+        text_marker.text = '%.2f'%minD
+
+        text_marker.scale.x = 1.0
+        text_marker.scale.y = 1.0
+        text_marker.scale.z = 1.0
+
+        text_marker.color.r = 1.0
+        text_marker.color.g = 1.0
+        text_marker.color.b = 1.0
+        text_marker.color.a = 0.8
+        marker_array.markers.append(text_marker)
+
+    dist_pub.publish(marker_array)
